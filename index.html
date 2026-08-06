@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TruthLens — Misinformation Detector</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0C0E11; --surface: #141618; --surface-2: #1C1F23;
+    --border: #2A2D32; --text-primary: #F0F2F5; --text-secondary: #8A9099;
+    --text-muted: #4A5058; --accent: #4FFFE0; --red: #FF5C5C;
+    --green: #4FFFE0; --yellow: #FFD166;
+    --red-dim: rgba(255,92,92,0.08); --green-dim: rgba(79,255,224,0.08);
+    --yellow-dim: rgba(255,209,102,0.08);
+    --mono: 'IBM Plex Mono', monospace; --sans: 'Inter', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text-primary); font-family: var(--sans);
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px 80px; }
+  .header { text-align: center; margin-bottom: 48px; max-width: 600px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .eyebrow::before, .eyebrow::after { content: ''; display: block; width: 32px;
+    height: 1px; background: var(--accent); opacity: 0.4; }
+  h1 { font-size: 42px; font-weight: 600; letter-spacing: -0.03em;
+    line-height: 1.1; margin-bottom: 12px; }
+  h1 span { color: var(--accent); }
+  .subtitle { font-size: 15px; color: var(--text-secondary); line-height: 1.6; font-weight: 300; }
+  .stats-bar { display: flex; gap: 1px; background: var(--border); border-radius: 10px;
+    overflow: hidden; margin-bottom: 32px; width: 100%; max-width: 640px; }
+  .stat { flex: 1; background: var(--surface); padding: 14px 16px; text-align: center; }
+  .stat-value { font-family: var(--mono); font-size: 18px; font-weight: 500;
+    color: var(--accent); display: block; }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-top: 2px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 28px; width: 100%; max-width: 640px; margin-bottom: 16px; }
+  .card-label { font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+  textarea { width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text-primary); font-family: var(--sans);
+    font-size: 14px; line-height: 1.7; padding: 16px; resize: vertical;
+    min-height: 140px; outline: none; transition: border-color 0.15s; }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-muted); }
+  .char-count { font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+    text-align: right; margin-top: 6px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .example-chip { font-size: 12px; color: var(--text-secondary); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px;
+    cursor: pointer; transition: all 0.15s; font-family: var(--sans); }
+  .example-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .btn { width: 100%; background: var(--accent); color: #0C0E11; border: none;
+    border-radius: 10px; padding: 16px; font-size: 15px; font-weight: 600;
+    font-family: var(--sans); cursor: pointer; transition: all 0.15s;
+    letter-spacing: -0.01em; margin-top: 16px; }
+  .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .result-card { border-radius: 16px; padding: 24px 28px; width: 100%;
+    max-width: 640px; margin-bottom: 16px; display: none; border: 1px solid; }
+  .result-card.fake { background: var(--red-dim); border-color: rgba(255,92,92,0.3); }
+  .result-card.real { background: var(--green-dim); border-color: rgba(79,255,224,0.3); }
+  .result-card.uncertain { background: var(--yellow-dim); border-color: rgba(255,209,102,0.3); }
+  .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .result-icon { font-size: 28px; line-height: 1; }
+  .result-verdict { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .result-card.fake .result-verdict { color: var(--red); }
+  .result-card.real .result-verdict { color: var(--green); }
+  .result-card.uncertain .result-verdict { color: var(--yellow); }
+  .prob-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .prob-box { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px; }
+  .prob-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-muted); font-family: var(--mono); margin-bottom: 4px; }
+  .prob-value { font-family: var(--mono); font-size: 20px; font-weight: 500; }
+  .prob-box.fake-box .prob-value { color: var(--red); }
+  .prob-box.real-box .prob-value { color: var(--green); }
+  .confidence-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .confidence-bar-bg { flex: 1; height: 6px; background: rgba(255,255,255,0.08);
+    border-radius: 3px; overflow: hidden; }
+  .confidence-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+  .result-card.fake .confidence-bar-fill { background: var(--red); }
+  .result-card.real .confidence-bar-fill { background: var(--green); }
+  .result-card.uncertain .confidence-bar-fill { background: var(--yellow); }
+  .confidence-label { font-family: var(--mono); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .result-card.fake .confidence-label { color: var(--red); }
+  .result-card.real .confidence-label { color: var(--green); }
+  .result-card.uncertain .confidence-label { color: var(--yellow); }
+  .loading { display: none; align-items: center; justify-content: center; gap: 10px;
+    padding: 20px; color: var(--text-secondary); font-size: 14px; font-family: var(--mono);
+    max-width: 640px; width: 100%; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .footer { margin-top: 48px; text-align: center; font-size: 12px; color: var(--text-muted);
+    font-family: var(--mono); max-width: 640px; line-height: 1.8; }
+  .api-note { font-size: 12px; color: var(--text-muted); font-family: var(--mono);
+    text-align: center; margin-bottom: 16px; }
+  .api-note span { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="eyebrow">U-SOAR 2026 &mdash; IUP</div>
+  <h1>Truth<span>Lens</span></h1>
+  <p class="subtitle">A machine learning tool for detecting misinformation in news articles and headlines. Powered by a DistilBERT model fine-tuned on 72,134 labeled news articles.</p>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><span class="stat-value">99.3%</span><span class="stat-label">F1 Score</span></div>
+  <div class="stat"><span class="stat-value">72,134</span><span class="stat-label">Articles trained</span></div>
+  <div class="stat"><span class="stat-value">51</span><span class="stat-label">Errors on 7,214</span></div>
+  <div class="stat"><span class="stat-value">4</span><span class="stat-label">Models compared</span></div>
+</div>
+
+<p class="api-note">Connected to: <span id="api-url-display">not set</span></p>
+
+<div class="card">
+  <div class="card-label">Paste article text or headline</div>
+  <textarea id="input" placeholder="Paste a news headline, article, or any text you want to analyze..."></textarea>
+  <div class="char-count"><span id="char-count">0</span> characters</div>
+  <div class="examples">
+    <span class="card-label" style="margin:0;align-self:center">Try:</span>
+    <button class="example-chip" onclick="setExample('Federal Reserve raises interest rates by 0.25 percent amid ongoing inflation concerns, citing strong labor market data.')">Real news</button>
+    <button class="example-chip" onclick="setExample('SHOCKING: Scientists ADMIT vaccines contain microchips to track citizens — government cover-up exposed!')">Fake news</button>
+    <button class="example-chip" onclick="setExample('Local congressman calls for investigation into city budget after audit reveals discrepancies in spending records.')">Try another</button>
+  </div>
+  <button class="btn" id="analyze-btn" onclick="analyze()">Analyze Text</button>
+</div>
+
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <span>Running DistilBERT inference...</span>
+</div>
+
+<div class="result-card" id="result-card">
+  <div class="result-header">
+    <span class="result-icon" id="result-icon"></span>
+    <span class="result-verdict" id="result-verdict"></span>
+  </div>
+  <div class="prob-row">
+    <div class="prob-box fake-box">
+      <div class="prob-label">Fake probability</div>
+      <div class="prob-value" id="fake-prob">-</div>
+    </div>
+    <div class="prob-box real-box">
+      <div class="prob-label">Real probability</div>
+      <div class="prob-value" id="real-prob">-</div>
+    </div>
+  </div>
+  <div class="confidence-row">
+    <div class="confidence-bar-bg">
+      <div class="confidence-bar-fill" id="confidence-bar" style="width:0%"></div>
+    </div>
+    <span class="confidence-label" id="confidence-label"></span>
+  </div>
+</div>
+
+<div class="footer">
+  Built by Dalton Boden &mdash; IUP U-SOAR 2026<br>
+  Dataset: WELFake (72,134 articles) &mdash; Model: DistilBERT fine-tuned<br>
+  Supervised by Dr. Ezekiel, Department of Computer Science
+</div>
+
+<script>
+  // IMPORTANT: After deploying to Render, replace this URL with your live Render URL
+  // Example: const API_URL = 'https://truthlens-api.onrender.com';
+  const API_URL = 'http://localhost:5000';
+
+  document.getElementById('api-url-display').textContent = API_URL;
+
+  const textarea = document.getElementById('input');
+  textarea.addEventListener('input', () => {
+    document.getElementById('char-count').textContent = textarea.value.length;
+  });
+
+  function setExample(text) {
+    textarea.value = text;
+    document.getElementById('char-count').textContent = text.length;
+    textarea.focus();
+  }
+
+  async function analyze() {
+    const text = textarea.value.trim();
+    if (!text) return;
+
+    document.getElementById('analyze-btn').disabled = true;
+    document.getElementById('result-card').style.display = 'none';
+    document.getElementById('loading').style.display = 'flex';
+
+    try {
+      const response = await fetch(API_URL + '/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      const result = await response.json();
+      showResult(result);
+    } catch (err) {
+      alert('Could not connect to the API. Make sure app.py is running on localhost:5000.');
+    } finally {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('analyze-btn').disabled = false;
+    }
+  }
+
+  function showResult(result) {
+    const card = document.getElementById('result-card');
+    const verdict = result.verdict;
+
+    card.className = 'result-card ' + verdict.toLowerCase();
+    document.getElementById('result-icon').textContent =
+      verdict === 'FAKE' ? '⚠️' : verdict === 'REAL' ? '✓' : '?';
+    document.getElementById('result-verdict').textContent =
+      verdict === 'FAKE' ? 'Likely Misinformation' :
+      verdict === 'REAL' ? 'Appears Credible' : 'Uncertain';
+    document.getElementById('fake-prob').textContent = result.fake_probability + '%';
+    document.getElementById('real-prob').textContent = result.real_probability + '%';
+    document.getElementById('confidence-label').textContent = result.confidence + '% confidence';
+    document.getElementById('confidence-bar').style.width = result.confidence + '%';
+    card.style.display = 'block';
+  }
+</script>
+</body>
+</html>
