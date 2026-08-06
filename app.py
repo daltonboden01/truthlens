@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Load model and tokenizer from the /model folder
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model')
+MODEL_PATH = 'daltonboden/truthlens-distilbert'
 
 print('Loading model...')
 tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_PATH)
