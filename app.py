@@ -7,12 +7,11 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Load model and tokenizer from the /model folder
-MODEL_PATH = 'daltonboden/truthlens-distilbert'
+print('Loading tokenizer from distilbert-base-uncased...')
+tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
 
-print('Loading model...')
-tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_PATH)
-model = DistilBertForSequenceClassification.from_pretrained(MODEL_PATH)
+print('Loading model weights from daltonboden/truthlens-distilbert...')
+model = DistilBertForSequenceClassification.from_pretrained('daltonboden/truthlens-distilbert')
 model.eval()
 print('Model loaded successfully.')
 
@@ -25,7 +24,6 @@ def predict():
     if not text:
         return jsonify({'error': 'No text provided'}), 400
 
-    # Tokenize input
     inputs = tokenizer(
         text,
         return_tensors='pt',
@@ -34,7 +32,6 @@ def predict():
         max_length=512
     )
 
-    # Run inference
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
@@ -43,12 +40,7 @@ def predict():
         confidence = round(probs[pred].item() * 100, 1)
 
     label = 'REAL' if pred == 1 else 'FAKE'
-
-    # Determine verdict category
-    if confidence >= 85:
-        verdict = label
-    else:
-        verdict = 'UNCERTAIN'
+    verdict = label if confidence >= 85 else 'UNCERTAIN'
 
     return jsonify({
         'verdict': verdict,
@@ -61,7 +53,7 @@ def predict():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'model': 'DistilBERT fine-tuned on WELFake'})
+    return jsonify({'status': 'ok', 'model': 'daltonboden/truthlens-distilbert'})
 
 
 if __name__ == '__main__':
